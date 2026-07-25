@@ -496,6 +496,7 @@ if(NOT STATICBUILD)
         "${BOX64_ROOT}/src/libtools/sdl2rwops.c"
         "${BOX64_ROOT}/src/tools/gtkclass.c"
         "${BOX64_ROOT}/src/librarian/globalsymbols.c"
+        "${BOX64_ROOT}/src/wrapped/wrappedffmpeg8.c"
         )
 endif()
 if(BOX32)
@@ -664,8 +665,11 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedldlinux.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibasound.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibavcodec58.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedlibavcodec62.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibavformat58.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedlibavformat62.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibavutil56.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedlibavutil60.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibblas.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibbsd.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibc.c"
@@ -710,6 +714,8 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedlibsndfile.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibssl.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibssl3.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedlibswresample6.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedlibswscale9.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibtinfo.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibtinfo6.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibusb1.c"
