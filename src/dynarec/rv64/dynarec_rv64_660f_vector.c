@@ -464,8 +464,7 @@ uintptr_t dynarec64_660F_vector(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t i
                         }
                         VMV_X_S(x4, VMASK);
                         if (!cpuext.xtheadvector) ANDI(x4, x4, 0b11);
-                        BNEZ(x4, 8);
-                        ORI(xFlags, xFlags, 1 << F_ZF);
+                        SET_FLAGS_EQZ(x4, F_ZF, x3);
                     }
                     IFX (X_CF) {
                         VXOR_VI(v0, q0, 0x1F, VECTOR_UNMASKED);
@@ -480,8 +479,7 @@ uintptr_t dynarec64_660F_vector(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t i
                         }
                         VMV_X_S(x4, VMASK);
                         if (!cpuext.xtheadvector) ANDI(x4, x4, 0b11);
-                        BNEZ(x4, 8);
-                        ORI(xFlags, xFlags, 1 << F_CF);
+                        SET_FLAGS_EQZ(x4, F_CF, x3);
                     }
                     break;
                 case 0x1C ... 0x1E:
@@ -1743,7 +1741,7 @@ uintptr_t dynarec64_660F_vector(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t i
             vector_vsetvli(dyn, ninst, x1, VECTOR_SEW64, VECTOR_LMUL2, 2);
             VSLIDEUP_VI(v0, (q1 & 1) ? d1 : q1, 2, VECTOR_UNMASKED);
             VCOMPRESS_VM(d0, v0, VMASK);
-            VXOR_VI(VMASK, VMASK, 0x1F, VECTOR_UNMASKED);
+            VMNAND_MM(VMASK, VMASK, VMASK);
             VCOMPRESS_VM(d1, v0, VMASK);
             vector_vsetvli(dyn, ninst, x1, VECTOR_SEW64, VECTOR_LMUL1, 1);
             if (!BOX64ENV(dynarec_fastnan)) {
