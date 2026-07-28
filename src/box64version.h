@@ -4,5 +4,6 @@
 #define BOX64_MAJOR 0
 #define BOX64_MINOR 4
 #define BOX64_REVISION 3
+#define BOX64_CUSTOM_VERSION "BandiFeeSwitchBox64"
 
 #endif //__BOX64_VERSION_H_
