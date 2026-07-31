@@ -50,7 +50,6 @@ typedef struct x64_stack_s x64_stack_t;
 extern int mkdir(const char *path, mode_t mode);
 extern int mknod(const char *path, mode_t mode, dev_t dev);
 extern int chmod(const char *path, mode_t mode);
-extern int fchmodat (int __fd, const char *__file, mode_t __mode, int __flag);
 
 //int32_t my_getrandom(x64emu_t* emu, void* buf, uint32_t buflen, uint32_t flags);
 int of_convert(int flag);
@@ -134,6 +133,9 @@ static const scwrap_t syscallwrap[] = {
     //[25] = {__NR_mremap, 5},    // wrapped to track protection
     [27] = {__NR_mincore, 3},
     [28] = {__NR_madvise, 3},
+    #ifdef __NR_dup
+    [32] = {__NR_dup, 1},
+    #endif
     #ifdef __NR_dup2
     [33] = {__NR_dup2, 2},
     #endif
@@ -141,6 +143,7 @@ static const scwrap_t syscallwrap[] = {
     [34] = {__NR_pause, 0},
     #endif
     [35] = {__NR_nanosleep, 2},
+    [36] = {__NR_getitimer, 2},
     [38] = {__NR_setitimer, 3},
     [39] = {__NR_getpid, 0},
     [40] = {__NR_sendfile, 4},
@@ -198,12 +201,15 @@ static const scwrap_t syscallwrap[] = {
     [90] = {__NR_chmod, 2},
     #endif
     [91] = {__NR_fchmod, 2},
+    [93] = {__NR_fchown, 3},
     [95] = {__NR_umask, 1},
     [96] = {__NR_gettimeofday, 2},
     #ifdef __NR_getrlimit
     [97] = {__NR_getrlimit, 2},
     #endif
+    [98] = {__NR_getrusage, 2},
     [99] = {__NR_sysinfo, 1},
+    [100] = {__NR_times, 1},
     [101] = {__NR_ptrace, 4},
     [102] = {__NR_getuid, 0},
     [104] = {__NR_getgid, 0},
@@ -221,7 +227,9 @@ static const scwrap_t syscallwrap[] = {
     #ifdef __NR_setgroups
     [116] = {__NR_setgroups, 2},
     #endif
+    [117] = {__NR_setresuid, 3},
     [118] = {__NR_getresuid, 3},
+    [119] = {__NR_setresgid, 3},
     [120] = {__NR_getresgid, 3},
     [121] = {__NR_getpgid, 1},
     [122] = {__NR_setfsuid, 1},
@@ -238,7 +246,13 @@ static const scwrap_t syscallwrap[] = {
     [137] = {__NR_statfs, 2},
     [138] = {__NR_fstatfs, 2},
     [140] = {__NR_getpriority, 2},
+    [141] = {__NR_setpriority, 3},
+    [142] = {__NR_sched_setparam, 2},
+    [143] = {__NR_sched_getparam, 2},
+    [144] = {__NR_sched_setscheduler, 3},
     [145] = {__NR_sched_getscheduler, 1},
+    [146] = {__NR_sched_get_priority_max, 1},
+    [147] = {__NR_sched_get_priority_min, 1},
     [148] = {__NR_sched_rr_get_interval, 2},
     [149] = {__NR_mlock, 2},
     [150] = {__NR_munlock, 2},
@@ -273,6 +287,7 @@ static const scwrap_t syscallwrap[] = {
     [217] = {__NR_getdents64, 3},
     [218] = {__NR_set_tid_address, 1},
     [220] = {__NR_semtimedop, 4},
+    [221] = {__NR_fadvise64, 4},
     [228] = {__NR_clock_gettime, 2},
     [229] = {__NR_clock_getres, 2},
     [230] = {__NR_clock_nanosleep, 4},
@@ -289,6 +304,7 @@ static const scwrap_t syscallwrap[] = {
     [239] = {__NR_get_mempolicy, 5},
     [247] = {__NR_waitid, 5},
     [251] = {__NR_ioprio_set, 3},
+    [252] = {__NR_ioprio_get, 2},
     #ifdef __NR_inotify_init
     [253] = {__NR_inotify_init, 0},   //0xFD
     #endif
@@ -336,6 +352,7 @@ static const scwrap_t syscallwrap[] = {
     [298] = {__NR_perf_event_open, 5},
     [302] = {__NR_prlimit64, 4},
     [309] = {__NR_getcpu, 3}, // need wrapping?
+    [312] = {__NR_kcmp, 5},
     [314] = {__NR_sched_setattr, 3},
     [315] = {__NR_sched_getattr, 4},
     [316] = {__NR_renameat2, 5},
@@ -347,6 +364,12 @@ static const scwrap_t syscallwrap[] = {
     #ifdef __NR_copy_file_range
     // TODO: call back if unavailable?
     [326] = {__NR_copy_file_range, 6},
+    #endif
+    #ifdef __NR_preadv2
+    [327] = {__NR_preadv2, 6},
+    #endif
+    #ifdef __NR_pwritev2
+    [328] = {__NR_pwritev2, 6},
     #endif
     #ifdef __NR_statx
     // TODO: implement fallback if __NR_statx is not defined
@@ -361,8 +384,8 @@ static const scwrap_t syscallwrap[] = {
     #ifdef __NR_io_uring_register
     [427] = {__NR_io_uring_register, 4},
     #endif
-    #ifdef __NR_fchmodat4
-    [434] = {__NR_fchmodat4, 4},
+    #ifdef __NR_pidfd_open
+    [434] = {__NR_pidfd_open, 2},
     #endif
     #ifdef __NR_close_range
     [436] = {__NR_close_range, 3},
@@ -691,6 +714,13 @@ void EXPORT x64Syscall_linux(x64emu_t *emu)
         case 25: // sys_mremap
             R_RAX = (uintptr_t)my_mremap(emu, (void*)R_RDI, R_RSI, R_RDX, R_R10d, (void*)R_R8);
             break;
+        #ifndef __NR_dup
+        case 32: // sys_dup
+            S_RAX = dup(S_EDI);
+            if(S_RAX==-1)
+                S_RAX = -errno;
+            break;
+        #endif
         #ifndef __NR_dup2
         case 33: // sys_dup2
             S_RAX = dup2(S_EDI, S_ESI);
@@ -1001,13 +1031,6 @@ void EXPORT x64Syscall_linux(x64emu_t *emu)
         case 334: // It is helpeful to run static binary
             R_RAX = -ENOSYS;
             break;
-        #ifndef __NR_fchmodat4
-        case 434:
-            S_RAX = fchmodat(S_EDI, (void*)R_RSI, (mode_t)R_RDX, S_R10d);
-            if(S_RAX==-1)
-                S_RAX = -errno;
-            break;
-        #endif
         #ifndef __NR_faccessat2
         case 439:
             S_RAX = faccessat(S_EDI, (void*)R_RSI, (mode_t)R_RDX, S_R10d);
@@ -1145,6 +1168,10 @@ long EXPORT my_syscall(x64emu_t *emu)
         #endif
         case 25: // sys_mremap
             return (intptr_t)my_mremap(emu, (void*)R_RSI, R_RDX, R_RCX, R_R8d, (void*)R_R9);
+        #ifndef __NR_dup
+        case 32:
+            return dup(S_ESI);
+        #endif
         #ifndef __NR_dup2
         case 33:
             return dup2(S_ESI, S_EDX);
@@ -1366,10 +1393,6 @@ long EXPORT my_syscall(x64emu_t *emu)
         #endif
         case 317:   // sys_seccomp
             return 0;  // ignoring call
-        #ifndef __NR_fchmodat4
-        case 434:
-            return fchmodat(S_ESI, (void*)R_RDX, (mode_t)R_RCX, S_R8d);
-        #endif
         #ifndef __NR_faccessat2
         case 439:
             return faccessat(S_ESI, (void*)R_RDX, (mode_t)R_RCX, S_R8d);
