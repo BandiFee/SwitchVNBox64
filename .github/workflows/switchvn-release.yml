@@ -12,10 +12,14 @@ on:
       ffmpeg_ref:
         description: 'SwitchVN-FFmpeg ref to check the wrapper minimums against'
         required: false
-        default: envideo
+        default: switchvn-ffmpeg-8.1.1-1
 
 env:
   ASSET: switchvn-box64.deb
+  # Checked against the FFmpeg release users install, not against a branch.
+  # A branch would validate code that has not shipped, so the check could pass
+  # while the combination named in switchvn.lock does not.
+  FFMPEG_REF: switchvn-ffmpeg-8.1.1-1
 
 jobs:
   build:
@@ -31,7 +35,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: BandiFee/SwitchVN-FFmpeg
-          ref: ${{ github.event.inputs.ffmpeg_ref || 'envideo' }}
+          ref: ${{ github.event.inputs.ffmpeg_ref || env.FFMPEG_REF }}
           path: ffmpeg
 
       - name: Install build dependencies
