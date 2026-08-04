@@ -130,5 +130,20 @@ jobs:
                  --repo "${{ github.repository }}"
           gh release upload "$TAG" "$ASSET" --clobber --repo "${{ github.repository }}"
 
+      - name: Verify the asset is actually published
+        # A release lives on its tag, so anything that removes the tag removes
+        # the release with it -- and gh release upload can then no-op without a
+        # non-zero exit, leaving a green build and nothing to download. Read the
+        # asset list back and fail if it is not there.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          names=$(gh release view "$TAG" --repo "${{ github.repository }}" \
+            --json assets --jq '.assets[].name')
+          echo "$names"
+          printf '%s\n' "$names" | grep -qx 'switchvn-box64.deb' \
+            || { echo "::error::switchvn-box64.deb is not attached to release $TAG"; exit 1; }
+
     permissions:
       contents: write
