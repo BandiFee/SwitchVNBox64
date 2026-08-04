@@ -122,10 +122,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          gh release view "$TAG" >/dev/null 2>&1 \
+          # No checkout lands at the workspace root (box64/ and ffmpeg/ are
+          # checked out separately), so gh cannot infer the repo from git.
+          gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1 \
             || gh release create "$TAG" --title "$TAG" \
-                 --notes "Box64 for Tegra X1, pinned to the SwitchVN FFmpeg build"
-          gh release upload "$TAG" "$ASSET" --clobber
+                 --notes "Box64 for Tegra X1, pinned to the SwitchVN FFmpeg build" \
+                 --repo "${{ github.repository }}"
+          gh release upload "$TAG" "$ASSET" --clobber --repo "${{ github.repository }}"
 
     permissions:
       contents: write
