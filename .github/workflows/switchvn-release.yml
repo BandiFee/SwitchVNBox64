@@ -1,0 +1,131 @@
+name: SwitchVN Release
+
+on:
+  push:
+    tags:
+      - 'switchvn-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish the release under'
+        required: true
+      ffmpeg_ref:
+        description: 'SwitchVN-FFmpeg ref to check the wrapper minimums against'
+        required: false
+        default: envideo
+
+env:
+  ASSET: switchvn-box64.deb
+
+jobs:
+  build:
+    # Matches the Switch's Ubuntu 24.04 userspace.
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: box64
+
+      - name: Check out SwitchVN-FFmpeg
+        uses: actions/checkout@v4
+        with:
+          repository: BandiFee/SwitchVN-FFmpeg
+          ref: ${{ github.event.inputs.ffmpeg_ref || 'envideo' }}
+          path: ffmpeg
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gcc python3
+
+      - name: Check the ffmpeg8 wrapper against SwitchVN-FFmpeg
+        # src/wrapped/wrappedffmpeg8.c refuses the whole native set if any one
+        # library is older than its minimum -- see close_ffmpeg8_libraries() --
+        # and says so only at LOG_DEBUG. A mismatch would leave the Switch
+        # emulating the x86 FFmpeg with no visible sign, so fail here instead.
+        run: |
+          python3 - <<'PY'
+          import re, sys
+
+          src = open('box64/src/wrapped/wrappedffmpeg8.c').read()
+          mins = {m[0]: tuple(map(int, m[1:])) for m in re.findall(
+              r'\{"(lib\w+\.so\.\d+)",\s*"\w+",\s*AV_VERSION_INT\((\d+),\s*(\d+),\s*(\d+)\)', src)}
+          if not mins:
+              sys.exit('could not parse the minimum versions out of wrappedffmpeg8.c')
+
+          dirs = {'libavcodec.so.62': ('libavcodec', 'LIBAVCODEC'),
+                  'libavformat.so.62': ('libavformat', 'LIBAVFORMAT'),
+                  'libavutil.so.60': ('libavutil', 'LIBAVUTIL'),
+                  'libswscale.so.9': ('libswscale', 'LIBSWSCALE'),
+                  'libswresample.so.6': ('libswresample', 'LIBSWRESAMPLE')}
+
+          def version(d, prefix):
+              # MAJOR lives in version_major.h for most of these, MINOR/MICRO in version.h
+              text = ''
+              for name in ('version.h', 'version_major.h'):
+                  try:
+                      text += open(f'ffmpeg/{d}/{name}').read()
+                  except FileNotFoundError:
+                      pass
+              return tuple(int(re.search(rf'#define {prefix}_VERSION_{k}\s+(\d+)', text).group(1))
+                           for k in ('MAJOR', 'MINOR', 'MICRO'))
+
+          failed = False
+          for soname, (d, prefix) in dirs.items():
+              need = mins.get(soname)
+              if need is None:
+                  print(f'FAIL {soname} is no longer in the wrapper table')
+                  failed = True
+                  continue
+              have = version(d, prefix)
+              # The wrapper requires an exact major match, then >= overall.
+              ok = have[0] == need[0] and have >= need
+              print(f'{"ok  " if ok else "FAIL"} {soname:<22} needs >= '
+                    f'{".".join(map(str, need)):<12} ffmpeg has {".".join(map(str, have))}')
+              failed |= not ok
+
+          if failed:
+              sys.exit('\nSwitchVN-FFmpeg does not satisfy the ffmpeg8 wrapper. Box64 would '
+                       'silently fall back to emulating the x86 libraries.')
+          PY
+
+      - name: Build
+        # TEGRAX1 is the Switch's SoC.
+        #
+        # BOX32 is deliberately off, matching the build already running on the
+        # Switch: it has no /usr/lib/box64-i386-linux-gnu (which BOX32 installs)
+        # and no box32 binfmt entry. Upstream also marks it experimental. Turning
+        # it on here would ship a materially different emulator than the one the
+        # rest of SwitchVN was tested against.
+        run: |
+          cmake -S box64 -B build -G Ninja \
+            -DTEGRAX1=1 \
+            -DARM_DYNAREC=ON \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j"$(nproc)"
+
+      - name: Package
+        run: |
+          cd build
+          cpack
+          ls -l *.deb
+          mv "$(ls *.deb | head -n1)" "$GITHUB_WORKSPACE/$ASSET"
+
+      - name: Inspect package
+        run: |
+          dpkg-deb --info "$ASSET"
+          dpkg-deb --contents "$ASSET" | grep -E 'bin/box64|binfmt'
+
+      - name: Publish release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --title "$TAG" \
+                 --notes "Box64 for Tegra X1, pinned to the SwitchVN FFmpeg build"
+          gh release upload "$TAG" "$ASSET" --clobber
+
+    permissions:
+      contents: write
