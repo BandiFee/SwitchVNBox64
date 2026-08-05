@@ -109,6 +109,20 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build -j"$(nproc)"
 
+      - name: Confirm the Tegra X1 tuning reached the compiler
+        # TEGRAX1 maps to -mcpu=cortex-a57+crypto, but CMake applies it through
+        # set_source_files_properties on particular source groups rather than
+        # globally, and Ninja does not echo compile commands - so a silently
+        # ineffective option would look exactly like a working build. Read the
+        # generated ninja file, which holds the commands that actually ran.
+        run: |
+          flags=$(grep -m1 -oE '\-mcpu=[^ ]+' build/build.ninja || true)
+          echo "resolved: ${flags:-<none>}"
+          case "$flags" in
+            *cortex-a57*) echo "ok   built for Tegra X1 (Cortex-A57)" ;;
+            *) echo "::error::expected -mcpu=cortex-a57, got '${flags:-nothing}'"; exit 1 ;;
+          esac
+
       - name: Package
         run: |
           cd build
