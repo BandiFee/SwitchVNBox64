@@ -97,15 +97,21 @@ jobs:
       - name: Build
         # TEGRAX1 is the Switch's SoC.
         #
-        # BOX32 is deliberately off, matching the build already running on the
-        # Switch: it has no /usr/lib/box64-i386-linux-gnu (which BOX32 installs)
-        # and no box32 binfmt entry. Upstream also marks it experimental. Turning
-        # it on here would ship a materially different emulator than the one the
-        # rest of SwitchVN was tested against.
+        # BOX32 is required, not optional. Proton and most visual novels have
+        # 32-bit x86 components, and a box64 without it makes Steam exit the
+        # moment Play is clicked - no error, the button just comes back. A build
+        # with BOX32 off shipped once and did exactly that.
+        #
+        # It leaves no obvious trace on an installed system: no box32 binfmt
+        # entry, no /usr/lib/box64-i386-linux-gnu. Those were checked and taken
+        # as evidence BOX32 was off in the working build, which was wrong. The
+        # assertion below is the only reliable check.
         run: |
           cmake -S box64 -B build -G Ninja \
             -DTEGRAX1=1 \
             -DARM_DYNAREC=ON \
+            -DBOX32=1 \
+            -DBOX32_BINFMT=1 \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build -j"$(nproc)"
 
@@ -125,6 +131,17 @@ jobs:
           grep -q -- '-mcpu=cortex-a57' build/build.ninja \
             || { echo "::error::TEGRAX1 did not reach the C flags; no -mcpu=cortex-a57 in the build"; exit 1; }
           echo "ok   C sources built for Tegra X1 (Cortex-A57)"
+
+      - name: Confirm 32-bit support was built in
+        # Without BOX32 the 32-bit half of Proton cannot run and games fail to
+        # start at all. The option compiles src/wrapped32, so its objects in the
+        # build graph are the proof.
+        run: |
+          n=$(grep -c 'wrapped32' build/build.ninja || true)
+          echo "wrapped32 references in build.ninja: $n"
+          [ "$n" -gt 0 ] \
+            || { echo "::error::BOX32 did not take effect; 32-bit programs will not run"; exit 1; }
+          echo "ok   BOX32 compiled in"
 
       - name: Package
         run: |
