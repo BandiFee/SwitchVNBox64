@@ -1645,6 +1645,13 @@ else()
 	set(CPACK_DEBIAN_PACKAGE_DEPENDS "libandroid-sysv-semaphore")
 endif()
 set(CPACK_PACKAGE_HOMEPAGE_URL, "https://box86.org")
+# Switchdeck installs Pi-Apps' box64-tegrax1, which owns the same /usr/bin/box64
+# and /etc/binfmt.d/box64.conf. Without these fields dpkg refuses to unpack over
+# it ("trying to overwrite ... also in package box64-tegrax1") and the SwitchVN
+# build cannot replace it on an existing install.
+set(CPACK_DEBIAN_PACKAGE_CONFLICTS "box64-tegrax1, box64-generic-arm, box64-rk3588")
+set(CPACK_DEBIAN_PACKAGE_REPLACES  "box64-tegrax1, box64-generic-arm, box64-rk3588")
+set(CPACK_DEBIAN_PACKAGE_PROVIDES  "box64-tegrax1")
 file(STRINGS "${BOX64_ROOT}/src/box64version.h" TEMP_STRING REGEX "BOX64_MAJOR\\s*")
 string(REGEX REPLACE "BOX64_MAJOR" "" TEMP_STRING ${TEMP_STRING})
 string(REGEX MATCH "[0-9]" BOX64_MAJOR ${TEMP_STRING})
