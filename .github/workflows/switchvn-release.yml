@@ -107,7 +107,15 @@ jobs:
         # as evidence BOX32 was off in the working build, which was wrong. The
         # assertion below is the only reliable check.
         run: |
+          # CMAKE_INSTALL_PREFIX must be /usr. system/box64.conf.cmake bakes
+          # ${CMAKE_INSTALL_PREFIX}/bin/box64 into the binfmt registration at
+          # configure time, while CPack's DEB generator packages under /usr
+          # regardless. Left at the default the package registers
+          # /usr/local/bin/box64, which does not exist, so the kernel has no
+          # interpreter for x86 binaries: Steam exits the moment Play is
+          # clicked and box64 never runs, so not even BOX64_LOG says anything.
           cmake -S box64 -B build -G Ninja \
+            -DCMAKE_INSTALL_PREFIX=/usr \
             -DTEGRAX1=1 \
             -DARM_DYNAREC=ON \
             -DBOX32=1 \
@@ -154,6 +162,29 @@ jobs:
         run: |
           dpkg-deb --info "$ASSET"
           dpkg-deb --contents "$ASSET" | grep -E 'bin/box64|binfmt'
+
+      - name: Confirm binfmt points at where box64 is actually installed
+        # These come from different places - the path is baked into the conf at
+        # configure time, the binary is placed by CPack - so they can disagree
+        # silently. When they do, the kernel has no interpreter registered for
+        # x86 binaries and everything downstream fails without a message.
+        run: |
+          rm -rf pkg && mkdir pkg && dpkg-deb -x "$ASSET" pkg
+          bin=$(cd pkg && find . -path '*/bin/box64' -type f | sed 's/^\.//' | head -1)
+          echo "box64 installed at: $bin"
+          fail=0
+          for conf in pkg/etc/binfmt.d/*.conf; do
+            [ -e "$conf" ] || continue
+            interp=$(grep -v '^#' "$conf" | awk -F: '{print $(NF-1)}')
+            if [ "$interp" = "$bin" ]; then
+              printf 'ok   %s -> %s\n' "$(basename "$conf")" "$interp"
+            else
+              printf 'FAIL %s -> %s\n' "$(basename "$conf")" "$interp"
+              echo "::error::$(basename "$conf") registers $interp but box64 is installed at $bin"
+              fail=1
+            fi
+          done
+          exit $fail
 
       - name: Publish release asset
         env:
