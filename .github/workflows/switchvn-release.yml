@@ -114,14 +114,14 @@ jobs:
           # /usr/local/bin/box64, which does not exist, so the kernel has no
           # interpreter for x86 binaries: Steam exits the moment Play is
           # clicked and box64 never runs, so not even BOX64_LOG says anything.
-          cmake -S box64 -B build -G Ninja \
+          cmake -S box64 -B box64/build -G Ninja \
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DTEGRAX1=1 \
             -DARM_DYNAREC=ON \
             -DBOX32=1 \
             -DBOX32_BINFMT=1 \
             -DCMAKE_BUILD_TYPE=Release
-          cmake --build build -j"$(nproc)"
+          cmake --build box64/build -j"$(nproc)"
 
       - name: Confirm the Tegra X1 tuning reached the compiler
         # TEGRAX1 maps to -mcpu=cortex-a57+crypto, but CMake applies it through
@@ -135,17 +135,30 @@ jobs:
           # of target ("a random cpu that have 8.2 architecture so assembly can
           # be build" upstream), so matching the first one found says nothing.
           echo "-mcpu values in build.ninja:"
-          grep -oE '\-mcpu=[^ ]+' build/build.ninja | sort -u | sed 's/^/  /'
-          grep -q -- '-mcpu=cortex-a57' build/build.ninja \
+          grep -oE '\-mcpu=[^ ]+' box64/build/build.ninja | sort -u | sed 's/^/  /'
+          grep -q -- '-mcpu=cortex-a57' box64/build/build.ninja \
             || { echo "::error::TEGRAX1 did not reach the C flags; no -mcpu=cortex-a57 in the build"; exit 1; }
           echo "ok   C sources built for Tegra X1 (Cortex-A57)"
+
+      - name: Confirm the git revision was captured
+        # CMake generates src/git_head.h by running git rev-parse in the build
+        # directory, so building outside the checkout leaves GITREV empty. The
+        # banner then reads "v0.4.5-SwitchVN-1  with Dynarec" - two spaces where
+        # the revision should be - and a binary can no longer be traced back to
+        # a commit. That is why the build directory sits inside the checkout.
+        run: |
+          rev=$(sed -n 's/.*GITREV *"\([^"]*\)".*/\1/p' box64/src/git_head.h 2>/dev/null || true)
+          echo "GITREV: '${rev}'"
+          [ -n "$rev" ] \
+            || { echo "::error::git_head.h has an empty GITREV; the build cannot be traced to a commit"; exit 1; }
+          echo "ok   revision recorded"
 
       - name: Confirm 32-bit support was built in
         # Without BOX32 the 32-bit half of Proton cannot run and games fail to
         # start at all. The option compiles src/wrapped32, so its objects in the
         # build graph are the proof.
         run: |
-          n=$(grep -c 'wrapped32' build/build.ninja || true)
+          n=$(grep -c 'wrapped32' box64/build/build.ninja || true)
           echo "wrapped32 references in build.ninja: $n"
           [ "$n" -gt 0 ] \
             || { echo "::error::BOX32 did not take effect; 32-bit programs will not run"; exit 1; }
@@ -153,7 +166,7 @@ jobs:
 
       - name: Package
         run: |
-          cd build
+          cd box64/build
           cpack
           ls -l *.deb
           mv "$(ls *.deb | head -n1)" "$GITHUB_WORKSPACE/$ASSET"
