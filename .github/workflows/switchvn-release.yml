@@ -116,12 +116,15 @@ jobs:
         # ineffective option would look exactly like a working build. Read the
         # generated ninja file, which holds the commands that actually ran.
         run: |
-          flags=$(grep -m1 -oE '\-mcpu=[^ ]+' build/build.ninja || true)
-          echo "resolved: ${flags:-<none>}"
-          case "$flags" in
-            *cortex-a57*) echo "ok   built for Tegra X1 (Cortex-A57)" ;;
-            *) echo "::error::expected -mcpu=cortex-a57, got '${flags:-nothing}'"; exit 1 ;;
-          esac
+          # Report every distinct -mcpu in the build. More than one is normal:
+          # ASMFLAGS pins -mcpu=cortex-a76 for the dynarec assembly regardless
+          # of target ("a random cpu that have 8.2 architecture so assembly can
+          # be build" upstream), so matching the first one found says nothing.
+          echo "-mcpu values in build.ninja:"
+          grep -oE '\-mcpu=[^ ]+' build/build.ninja | sort -u | sed 's/^/  /'
+          grep -q -- '-mcpu=cortex-a57' build/build.ninja \
+            || { echo "::error::TEGRAX1 did not reach the C flags; no -mcpu=cortex-a57 in the build"; exit 1; }
+          echo "ok   C sources built for Tegra X1 (Cortex-A57)"
 
       - name: Package
         run: |
